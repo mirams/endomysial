@@ -11,6 +11,11 @@ pip install -r requirements.txt
 
 ## Usage
 
+First navigate to this folder at the terminal, then run
+```bash
+source .venv/bin/activate
+```
+
 To look at the annotated images with highlighted line segments, run for each file:
 
 ```bash
