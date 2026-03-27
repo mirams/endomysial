@@ -397,15 +397,6 @@ def plot_by_group(df):
         )
         for af_type in CLASS_ORDER
     ]
-    ax.legend(
-        handles=handles,
-        title="Group",
-        loc="upper left",
-        bbox_to_anchor=(1.01, 1.0),
-        borderaxespad=0,
-        framealpha=0.9,
-        fontsize=8,
-    )
 
     fig.suptitle(
         "CZI Annotation Measurements - Swarm Plot by Group",
