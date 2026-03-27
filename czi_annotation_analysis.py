@@ -29,6 +29,7 @@ Optional flags:
 
 import argparse
 import math
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -51,47 +52,24 @@ BDY_COLOUR = "#ff2255"   # red   – boundary-to-boundary segment
 
 def _image_origin_px(czi):
     """
-    Return the (X, Y) pixel-space origin of the image — i.e. where in
-    Zen's global coordinate space the top-left of this acquisition sits.
-    Annotation coordinates must have this subtracted to become image-
-    relative pixels.
-
-    Reads from czi.subblock_directory, which is present in all czifile
-    versions and is the most direct source of truth.  Returns None if
-    the origin cannot be determined, so the caller can fall back to the
-    XML heuristic.
+    Extract (X, Y) pixel-space origin from czifile if possible, or None.
+    The czifile API varies across versions, so this is best-effort.
+    XML parsing in _coord_offset is the primary fallback.
     """
-    # Primary: iterate SubBlock directory entries directly.
-    # Each entry has dimension_entries with .dimension ('X','Y',...) and
-    # .start (integer pixel position in Zen's global space).
+    # Try to read top-level start position directly
     try:
-        min_x, min_y = float('inf'), float('inf')
-        for entry in czi.subblock_directory:
-            for de in entry.dimension_entries:
-                dim = de.dimension.strip('\x00')
-                if dim == 'X':
-                    min_x = min(min_x, float(de.start))
-                elif dim == 'Y':
-                    min_y = min(min_y, float(de.start))
-        if math.isfinite(min_x) and math.isfinite(min_y):
-            return min_x, min_y
+        if hasattr(czi, 'start') and czi.start is not None:
+            # czi.start might be (start_x, start_y, ...) depending on dims
+            # For now, assume first two are X, Y if they exist
+            if len(czi.start) >= 2:
+                return float(czi.start[0]), float(czi.start[1])
     except Exception:
         pass
 
-    # Secondary: czi.start + czi.axes (available in older czifile builds).
-    try:
-        axes = czi.axes
-        start = czi.start
-        if 'X' in axes and 'Y' in axes:
-            return float(start[axes.index('X')]), float(start[axes.index('Y')])
-    except Exception:
-        pass
-
-    # Signal to the caller to use the XML fallback instead.
     return None
 
 
-def load_czi(path, channel=0):
+def load_czi(path, channel=0, scene=0):
     """
     Returns
     -------
@@ -117,12 +95,12 @@ def load_czi(path, channel=0):
         # ── Image data ───────────────────────────────────────────────────
         # Prefer asxarray: gives named dims so we can select channel safely.
         try:
-            xarr = czi.asxarray()          # xarray.DataArray with dim names
+            xarr = czi.asxarray(scene=scene)   # scene-specific DataArray
             print(f"[load] dims  : {dict(xarr.sizes)}")
             image = _squeeze_xarray(xarr, channel)
         except Exception as e:
             print(f"[load] asxarray failed ({e}); falling back to asarray …")
-            data = czi.asarray()
+            data = czi.asarray(scene=scene)
             print(f"[load] shape (raw): {data.shape}")
             image = _squeeze_ndarray(data, channel)
 
@@ -130,7 +108,6 @@ def load_czi(path, channel=0):
     image = (image.astype(np.float32) - lo) / (hi - lo + 1e-12)
     print(f"[load] display shape: {image.shape}")
     print(f"[load] pixel size   : {pixel_um:.6f} µm/px")
-    print(f"[load] image origin : x={origin[0]:.0f} px, y={origin[1]:.0f} px")
     return image, meta_xml, pixel_um, origin
 
 
@@ -216,21 +193,97 @@ def _squeeze_ndarray(data, channel):
 
 def _coord_offset(root):
     """
-    Zen stores annotation coordinates in the global stage/pixel coordinate
-    system, which has an origin offset from the image top-left corner.
-    The <MetadataNode> element gives us StartX / StartY (in pixels) that
-    we must subtract to get image-relative pixel coordinates.
+    Search the XML metadata for the image position in Zen's global pixel
+    coordinate space. Try multiple Zen-generated XML paths and log each.
+    Falls back to (0.0, 0.0) if all fail.
     """
-    mn = root.find('.//MetadataNodes/MetadataNode')
-    if mn is not None:
+    subset = root.find('.//SubsetBounds')
+    if subset is not None:
+        sx = subset.get('StartX')
+        sy = subset.get('StartY')
         try:
-            return float(mn.get('StartX', 0)), float(mn.get('StartY', 0))
+            if sx and sy:
+                return float(sx), float(sy)
         except (TypeError, ValueError):
             pass
+
+    # Path 1: <MetadataNodes><MetadataNode StartX="..." StartY="...">
+    mn = root.find('.//MetadataNodes/MetadataNode')
+    if mn is not None:
+        sx = mn.get('StartX')
+        sy = mn.get('StartY')
+        try:
+            if sx and sy:
+                return float(sx), float(sy)
+        except (TypeError, ValueError):
+            pass
+
+    # Path 2a: <Image><Metadata><Document><Scene><BoundingRectangle>
+    for bbox in root.findall('.//Document/Scene/BoundingRectangle'):
+        x = bbox.get('X') or bbox.findtext('X')
+        y = bbox.get('Y') or bbox.findtext('Y')
+        try:
+            if x and y:
+                return float(x), float(y)
+        except (TypeError, ValueError):
+            pass
+
+    # Path 2b: <Scenes><Scene><Shape><Geometry> with StartX/Y children
+    for scene in root.findall('.//Scenes/Scene'):
+        sx = scene.findtext('.//StartX') or scene.findtext('.//OffsetX')
+        sy = scene.findtext('.//StartY') or scene.findtext('.//OffsetY')
+        try:
+            if sx and sy:
+                return float(sx), float(sy)
+        except (TypeError, ValueError):
+            break
+
+    # Path 3: <Image><Metadata><SceneBoundingBox X="..." Y="...">
+    for bbox in root.findall('.//SceneBoundingBox'):
+        x = bbox.get('X') or bbox.findtext('X')
+        y = bbox.get('Y') or bbox.findtext('Y')
+        try:
+            if x and y:
+                return float(x), float(y)
+        except (TypeError, ValueError):
+            pass
+
+    # Path 4: Generic <BoundingBox X="..." Y="...">
+    bb = root.find('.//BoundingBox')
+    if bb is not None:
+        sx = bb.get('X') or bb.findtext('X')
+        sy = bb.get('Y') or bb.findtext('Y')
+        try:
+            if sx and sy:
+                return float(sx), float(sy)
+        except (TypeError, ValueError):
+            pass
+
+    # Path 5: <AcquisitionBlock OffsetX="..." OffsetY="...">
+    for acq in root.findall('.//AcquisitionBlock'):
+        sx = acq.get('OffsetX') or acq.get('StartX')
+        sy = acq.get('OffsetY') or acq.get('StartY')
+        try:
+            if sx and sy:
+                return float(sx), float(sy)
+        except (TypeError, ValueError):
+            break
+
     return 0.0, 0.0
 
 
-def parse_annotations(meta_xml, dump=False, origin=None):
+def _annotation_scene(el):
+    """Read StartS scene index from annotation SubsetBounds, if present."""
+    subset = el.find('.//Geometry/SubsetBounds')
+    if subset is None:
+        return None
+    try:
+        return int(subset.get('StartS', '0'))
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_annotations(meta_xml, dump=False, origin=None, scene=0):
     """
     Extract blob shapes and lines from Zen Lite XML metadata.
 
@@ -265,13 +318,14 @@ def parse_annotations(meta_xml, dump=False, origin=None):
         off_x, off_y = origin
     else:
         off_x, off_y = _coord_offset(root)
-    print(
-        f"[parse] coordinate offset: x={off_x:.0f} px, y={off_y:.0f} px")
 
     blobs, lines = [], []
 
     for el in root.iter():
         tag = el.tag.split('}')[-1]   # strip any XML namespace
+        ann_scene = _annotation_scene(el)
+        if ann_scene is not None and ann_scene != scene:
+            continue
 
         # ── Blob shapes: Bezier, Ellipse, Circle, Polygon, Polyline ──────
         if tag.lower() in ('bezier', 'ellipse', 'circle', 'polygon',
@@ -291,6 +345,20 @@ def parse_annotations(meta_xml, dump=False, origin=None):
 
 
 # ── XML element parsers ───────────────────────────────────────────────────────
+
+def _annotation_offset(el, default_x, default_y):
+    """Return the most specific pixel offset for one annotation element."""
+    subset = el.find('.//Geometry/SubsetBounds')
+    if subset is None:
+        return default_x, default_y
+
+    try:
+        sub_x = float(subset.get('StartX', default_x))
+        sub_y = float(subset.get('StartY', default_y))
+        return sub_x, sub_y
+    except (TypeError, ValueError):
+        return default_x, default_y
+
 
 def _parse_bezier_blob(el, off_x, off_y):
     """
@@ -319,9 +387,11 @@ def _parse_bezier_blob(el, off_x, off_y):
     if len(pts) < 3:
         return None
 
-    # Apply coordinate offset
-    pts[:, 0] -= off_x
-    pts[:, 1] -= off_y
+    blob_off_x, blob_off_y = _annotation_offset(el, off_x, off_y)
+
+    # Apply the annotation-local coordinate offset when available.
+    pts[:, 0] -= blob_off_x
+    pts[:, 1] -= blob_off_y
 
     cx, cy = pts[:, 0].mean(), pts[:, 1].mean()
 
@@ -346,12 +416,14 @@ def _parse_line(el, off_x, off_y):
     if None in (x1, y1, x2, y2):
         return None
 
+    line_off_x, line_off_y = _annotation_offset(el, off_x, off_y)
+
     mt = el.findtext('.//MeasurementText') or el.findtext('.//Text') or \
         f"line-{el.get('Id', '?')}"
 
     return dict(
-        x1=x1 - off_x, y1=y1 - off_y,
-        x2=x2 - off_x, y2=y2 - off_y,
+        x1=x1 - line_off_x, y1=y1 - line_off_y,
+        x2=x2 - line_off_x, y2=y2 - line_off_y,
         name=mt.strip().replace('\n', ' '),
     )
 
@@ -567,15 +639,24 @@ def main():
     ap.add_argument("--no-plot",  action="store_true",  help="Skip the plot")
     ap.add_argument("--dump-xml", action="store_true",
                     help="Print raw annotation XML")
+    ap.add_argument("--scene",    type=int, default=None,
+                    help="Scene/S index to analyse (default: auto from Slice<x> in path, else 0)")
     args = ap.parse_args()
+
+    # Infer scene from filename/path when possible, e.g. Slice2 -> scene 1.
+    # This avoids accidentally plotting Slice1 background for Slice2 files.
+    resolved_scene = args.scene
+    if resolved_scene is None:
+        m = re.search(r"[\\/]Slice(\d+)(?:[\\/]|$)", args.file, re.IGNORECASE)
+        resolved_scene = max(0, int(m.group(1)) - 1) if m else 0
 
     # 1. Load
     image, meta_xml, pixel_um, origin = load_czi(
-        args.file, channel=args.channel)
+        args.file, channel=args.channel, scene=resolved_scene)
 
     # 2. Parse annotations
     blobs, lines = parse_annotations(
-        meta_xml, dump=args.dump_xml, origin=origin)
+        meta_xml, dump=args.dump_xml, origin=origin, scene=resolved_scene)
 
     if not lines:
         print("\n[warn] No lines found in the metadata.\n"

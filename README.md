@@ -17,7 +17,7 @@ To look at the annotated images with highlighted line segments, run for each fil
 python czi_annotation_analysis.py --file Data/<path_to_czi_file>
 ```
 
-To run the analysis on all files and tabulate results in a csv file, run:
+To run the analysis on all files and output tabulated results in a csv file, run:
 
 ```bash
 python czi_batch_analysis.py

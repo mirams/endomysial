@@ -55,10 +55,12 @@ def iter_czi_files(data_dir: Path):
                 yield top_dir.name, slice_num, czi_path
 
 
-def analyse_czi(czi_path: Path, channel: int):
+def analyse_czi(czi_path: Path, channel: int, scene: int):
     """Return list of (annotation_index, full_len, boundary_len) tuples."""
-    _, meta_xml, pixel_um, origin = load_czi(str(czi_path), channel=channel)
-    blobs, lines = parse_annotations(meta_xml, dump=False, origin=origin)
+    _, meta_xml, pixel_um, origin = load_czi(
+        str(czi_path), channel=channel, scene=scene)
+    blobs, lines = parse_annotations(
+        meta_xml, dump=False, origin=origin, scene=scene)
 
     rows = []
     for idx, line in enumerate(lines, start=1):
@@ -113,7 +115,9 @@ def main():
         for top_name, slice_num, czi_path in iter_czi_files(data_dir):
             print(f"[batch] analysing {czi_path}")
             try:
-                measurements = analyse_czi(czi_path, channel=args.channel)
+                scene_idx = max(0, slice_num - 1)
+                measurements = analyse_czi(
+                    czi_path, channel=args.channel, scene=scene_idx)
             except Exception as exc:
                 print(f"[batch] failed {czi_path}: {exc}")
                 continue
