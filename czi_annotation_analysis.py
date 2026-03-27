@@ -49,6 +49,48 @@ BDY_COLOUR = "#ff2255"   # red   – boundary-to-boundary segment
 # 1.  LOAD CZI
 # ═════════════════════════════════════════════════════════════════════════════
 
+def _image_origin_px(czi):
+    """
+    Return the (X, Y) pixel-space origin of the image — i.e. where in
+    Zen's global coordinate space the top-left of this acquisition sits.
+    Annotation coordinates must have this subtracted to become image-
+    relative pixels.
+
+    Reads from czi.subblock_directory, which is present in all czifile
+    versions and is the most direct source of truth.  Returns None if
+    the origin cannot be determined, so the caller can fall back to the
+    XML heuristic.
+    """
+    # Primary: iterate SubBlock directory entries directly.
+    # Each entry has dimension_entries with .dimension ('X','Y',...) and
+    # .start (integer pixel position in Zen's global space).
+    try:
+        min_x, min_y = float('inf'), float('inf')
+        for entry in czi.subblock_directory:
+            for de in entry.dimension_entries:
+                dim = de.dimension.strip('\x00')
+                if dim == 'X':
+                    min_x = min(min_x, float(de.start))
+                elif dim == 'Y':
+                    min_y = min(min_y, float(de.start))
+        if math.isfinite(min_x) and math.isfinite(min_y):
+            return min_x, min_y
+    except Exception:
+        pass
+
+    # Secondary: czi.start + czi.axes (available in older czifile builds).
+    try:
+        axes = czi.axes
+        start = czi.start
+        if 'X' in axes and 'Y' in axes:
+            return float(start[axes.index('X')]), float(start[axes.index('Y')])
+    except Exception:
+        pass
+
+    # Signal to the caller to use the XML fallback instead.
+    return None
+
+
 def load_czi(path, channel=0):
     """
     Returns
@@ -56,6 +98,8 @@ def load_czi(path, channel=0):
     image        : 2-D float32 ndarray, normalised to [0, 1], ready for display
     meta_xml     : str  – raw XML metadata
     pixel_um     : float – physical pixel size in µm (X axis)
+    origin       : (float, float) – (X, Y) pixel offset of the image within
+                   Zen's global coordinate system, for annotation alignment
 
     Compatible with czifile >= 2024 (no .axes / .scale() API).
     Uses asxarray() to get a labelled DataArray, then falls back to
@@ -66,6 +110,9 @@ def load_czi(path, channel=0):
 
         # ── Pixel size from XML (works in all versions) ───────────────────
         pixel_um = _pixel_size_from_xml(meta_xml)
+
+        # ── Image origin from subblock bounding box (reliable) ───────────
+        origin = _image_origin_px(czi)
 
         # ── Image data ───────────────────────────────────────────────────
         # Prefer asxarray: gives named dims so we can select channel safely.
@@ -83,7 +130,8 @@ def load_czi(path, channel=0):
     image = (image.astype(np.float32) - lo) / (hi - lo + 1e-12)
     print(f"[load] display shape: {image.shape}")
     print(f"[load] pixel size   : {pixel_um:.6f} µm/px")
-    return image, meta_xml, pixel_um
+    print(f"[load] image origin : x={origin[0]:.0f} px, y={origin[1]:.0f} px")
+    return image, meta_xml, pixel_um, origin
 
 
 def _pixel_size_from_xml(meta_xml):
@@ -182,7 +230,7 @@ def _coord_offset(root):
     return 0.0, 0.0
 
 
-def parse_annotations(meta_xml, dump=False):
+def parse_annotations(meta_xml, dump=False, origin=None):
     """
     Extract blob shapes and lines from Zen Lite XML metadata.
 
@@ -191,7 +239,14 @@ def parse_annotations(meta_xml, dump=False):
       - <Line>   for the connecting lines  (child elements X1/Y1/X2/Y2)
 
     All raw coordinates are in the global Zen pixel space; we subtract
-    the image StartX/StartY offset so everything is image-relative pixels.
+    the image origin offset so everything is image-relative pixels.
+
+    Parameters
+    ----------
+    origin : (float, float) or None
+        (X, Y) pixel-space origin from czifile's subblock bounding box.
+        When supplied this is used directly; otherwise the code falls
+        back to parsing StartX/StartY from the XML (less reliable).
 
     Returns
     -------
@@ -206,9 +261,12 @@ def parse_annotations(meta_xml, dump=False):
         print("────────────────────────────────────────────────────────────\n")
 
     root = ET.fromstring(meta_xml)
-    off_x, off_y = _coord_offset(root)
+    if origin is not None:
+        off_x, off_y = origin
+    else:
+        off_x, off_y = _coord_offset(root)
     print(
-        f"[parse] coordinate offset: startX={off_x:.0f} px, startY={off_y:.0f} px")
+        f"[parse] coordinate offset: x={off_x:.0f} px, y={off_y:.0f} px")
 
     blobs, lines = [], []
 
@@ -512,10 +570,12 @@ def main():
     args = ap.parse_args()
 
     # 1. Load
-    image, meta_xml, pixel_um = load_czi(args.file, channel=args.channel)
+    image, meta_xml, pixel_um, origin = load_czi(
+        args.file, channel=args.channel)
 
     # 2. Parse annotations
-    blobs, lines = parse_annotations(meta_xml, dump=args.dump_xml)
+    blobs, lines = parse_annotations(
+        meta_xml, dump=args.dump_xml, origin=origin)
 
     if not lines:
         print("\n[warn] No lines found in the metadata.\n"
