@@ -216,7 +216,11 @@ def plot_by_slice(
     patient_colour,
     group_to_colour,
     group_to_class,
+    metric=METRIC,
+    ylabel=None,
+    save_path="swarm_plots.png",
 ):
+    ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
         figsize=(max(14, len(group_order) * 0.6), 5),
         constrained_layout=True,
@@ -227,7 +231,7 @@ def plot_by_slice(
     sns.swarmplot(
         data=df,
         x="group",
-        y=METRIC,
+        y=metric,
         hue="group",
         order=group_order,
         hue_order=group_order,
@@ -239,7 +243,7 @@ def plot_by_slice(
     sns.boxplot(
         data=df,
         x="group",
-        y=METRIC,
+        y=metric,
         hue="group",
         order=group_order,
         hue_order=group_order,
@@ -267,9 +271,9 @@ def plot_by_slice(
             )
         prev_patient = patient_id
 
-    ax.set_title("Boundary-Boundary Length", fontsize=13, fontweight="bold")
+    ax.set_title(ylabel, fontsize=13, fontweight="bold")
     ax.set_xlabel("Patient / Slice", fontsize=10)
-    ax.set_ylabel(METRIC.replace("_", " ").title(), fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
     ax.tick_params(axis="x", rotation=55, labelsize=8)
     add_legends(ax, patient_order, patient_colour)
 
@@ -278,12 +282,21 @@ def plot_by_slice(
         fontsize=14,
         fontweight="bold",
     )
-    plt.savefig("swarm_plots.png", dpi=150, bbox_inches="tight")
-    print("Saved -> swarm_plots.png")
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved -> {save_path}")
     plt.show()
 
 
-def plot_by_patient(df, patient_order, patient_colour, patient_to_class):
+def plot_by_patient(
+    df,
+    patient_order,
+    patient_colour,
+    patient_to_class,
+    metric=METRIC,
+    ylabel=None,
+    save_path="swarm_plots_by_patient.png",
+):
+    ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
         figsize=(max(8, len(patient_order) * 0.8), 5),
         constrained_layout=True,
@@ -294,7 +307,7 @@ def plot_by_patient(df, patient_order, patient_colour, patient_to_class):
     sns.swarmplot(
         data=df,
         x="top_level_folder",
-        y=METRIC,
+        y=metric,
         hue="top_level_folder",
         order=patient_order,
         hue_order=patient_order,
@@ -306,7 +319,7 @@ def plot_by_patient(df, patient_order, patient_colour, patient_to_class):
     sns.boxplot(
         data=df,
         x="top_level_folder",
-        y=METRIC,
+        y=metric,
         hue="top_level_folder",
         order=patient_order,
         hue_order=patient_order,
@@ -321,12 +334,12 @@ def plot_by_patient(df, patient_order, patient_colour, patient_to_class):
     )
 
     ax.set_title(
-        "Boundary-Boundary Length by Patient",
+        f"{ylabel} by Patient",
         fontsize=13,
         fontweight="bold",
     )
     ax.set_xlabel("Patient", fontsize=10)
-    ax.set_ylabel("Boundary Boundary Length", fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
     ax.tick_params(axis="x", labelsize=9)
     add_legends(ax, patient_order, patient_colour)
 
@@ -335,12 +348,13 @@ def plot_by_patient(df, patient_order, patient_colour, patient_to_class):
         fontsize=14,
         fontweight="bold",
     )
-    plt.savefig("swarm_plots_by_patient.png", dpi=150, bbox_inches="tight")
-    print("Saved -> swarm_plots_by_patient.png")
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved -> {save_path}")
     plt.show()
 
 
-def plot_by_group(df):
+def plot_by_group(df, metric=METRIC, ylabel=None, save_path="swarm_plots_by_group.png"):
+    ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
         figsize=(8, 5),
         constrained_layout=True,
@@ -354,7 +368,7 @@ def plot_by_group(df):
     sns.swarmplot(
         data=df,
         x="af_type",
-        y=METRIC,
+        y=metric,
         hue="af_type",
         order=CLASS_ORDER,
         hue_order=CLASS_ORDER,
@@ -366,7 +380,7 @@ def plot_by_group(df):
     sns.boxplot(
         data=df,
         x="af_type",
-        y=METRIC,
+        y=metric,
         hue="af_type",
         order=CLASS_ORDER,
         hue_order=CLASS_ORDER,
@@ -381,12 +395,12 @@ def plot_by_group(df):
     )
 
     ax.set_title(
-        "Boundary-Boundary Length by Group",
+        f"{ylabel} by Group",
         fontsize=13,
         fontweight="bold",
     )
     ax.set_xlabel("Group", fontsize=10)
-    ax.set_ylabel(METRIC.replace("_", " ").title(), fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
     ax.tick_params(axis="x", labelsize=10)
 
     handles = [
@@ -403,9 +417,25 @@ def plot_by_group(df):
         fontsize=14,
         fontweight="bold",
     )
-    plt.savefig("swarm_plots_by_group.png", dpi=150, bbox_inches="tight")
-    print("Saved -> swarm_plots_by_group.png")
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved -> {save_path}")
     plt.show()
+
+
+def load_area_data(df):
+    """Melt cell_a_area and cell_b_area into a single cell_area column."""
+    id_cols = [c for c in df.columns if c not in (
+        "cell_a_area", "cell_b_area")]
+    return (
+        df.melt(
+            id_vars=id_cols,
+            value_vars=["cell_a_area", "cell_b_area"],
+            var_name="cell_label",
+            value_name="cell_area",
+        )
+        .dropna(subset=["cell_area"])
+        .reset_index(drop=True)
+    )
 
 
 def main():
@@ -429,6 +459,43 @@ def main():
     )
     plot_by_patient(df, patient_order, patient_colour, patient_to_class)
     plot_by_group(df)
+
+    area_df = load_area_data(df)
+    (
+        patient_order,
+        group_order,
+        patient_colour,
+        group_to_colour,
+        group_to_class,
+        patient_to_class,
+    ) = prepare_orders(area_df)
+
+    plot_by_slice(
+        area_df,
+        patient_order,
+        group_order,
+        patient_colour,
+        group_to_colour,
+        group_to_class,
+        metric="cell_area",
+        ylabel="Cell Area (µm²)",
+        save_path="swarm_plots_cell_area.png",
+    )
+    plot_by_patient(
+        area_df,
+        patient_order,
+        patient_colour,
+        patient_to_class,
+        metric="cell_area",
+        ylabel="Cell Area (µm²)",
+        save_path="swarm_plots_cell_area_by_patient.png",
+    )
+    plot_by_group(
+        area_df,
+        metric="cell_area",
+        ylabel="Cell Area (µm²)",
+        save_path="swarm_plots_cell_area_by_group.png",
+    )
 
 
 if __name__ == "__main__":

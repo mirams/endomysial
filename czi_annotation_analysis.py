@@ -360,6 +360,12 @@ def _annotation_offset(el, default_x, default_y):
         return default_x, default_y
 
 
+def _polygon_area(pts):
+    """Shoelace formula for the area of a closed polygon (pts: Nx2 array)."""
+    x, y = pts[:, 0], pts[:, 1]
+    return 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
+
+
 def _parse_bezier_blob(el, off_x, off_y):
     """
     Parse a <Bezier> (or similar closed-polygon) element.
@@ -394,13 +400,14 @@ def _parse_bezier_blob(el, off_x, off_y):
     pts[:, 1] -= blob_off_y
 
     cx, cy = pts[:, 0].mean(), pts[:, 1].mean()
+    area_px = _polygon_area(pts)
 
     # Extract a human-readable name / measurement label if present
     mt = el.findtext('.//MeasurementText') or el.findtext('.//Text') or \
         el.findtext('.//Name') or f"blob-{el.get('Id', '?')}"
     name = mt.strip().replace('\n', ' ')
 
-    return dict(cx=cx, cy=cy, points=pts, name=name)
+    return dict(cx=cx, cy=cy, points=pts, name=name, area_px=area_px)
 
 
 def _parse_line(el, off_x, off_y):
@@ -533,6 +540,11 @@ def measure(line, blob_a, blob_b, pixel_um):
         by1=line["y1"] + uy * trim_a,
         bx2=line["x2"] - ux * trim_b,
         by2=line["y2"] - uy * trim_b,
+        # Cell areas
+        area_a_px=blob_a["area_px"] if blob_a is not None else None,
+        area_b_px=blob_b["area_px"] if blob_b is not None else None,
+        area_a_um2=(blob_a["area_px"] * pixel_um ** 2) if blob_a is not None else None,
+        area_b_um2=(blob_b["area_px"] * pixel_um ** 2) if blob_b is not None else None,
     )
 
 
@@ -541,22 +553,27 @@ def measure(line, blob_a, blob_b, pixel_um):
 # ═════════════════════════════════════════════════════════════════════════════
 
 def print_table(results, pixel_um):
-    w = 74
+    w = 100
     print("\n" + "═" * w)
     print(f"  {'#':>3}  {'C→C (px)':>10}  {'C→C (µm)':>10}  "
-          f"{'B→B (px)':>10}  {'B→B (µm)':>10}")
+          f"{'B→B (px)':>10}  {'B→B (µm)':>10}  "
+          f"{'Area A (µm²)':>13}  {'Area B (µm²)':>13}")
     print("─" * w)
     for i, (line, meas) in enumerate(results):
         if meas is None:
             print(f"  {i+1:>3}  (line {i+1} — could not pair blobs to endpoints)")
         else:
+            def _fmt_area(v):
+                return f"{v:>13.2f}" if v is not None else f"{'N/A':>13}"
             print(f"  {i+1:>3}  "
                   f"{meas['c2c_px']:>10.2f}  "
                   f"{meas['c2c_um']:>10.2f}  "
                   f"{meas['b2b_px']:>10.2f}  "
-                  f"{meas['b2b_um']:>10.2f}")
+                  f"{meas['b2b_um']:>10.2f}  "
+                  f"{_fmt_area(meas['area_a_um2'])}  "
+                  f"{_fmt_area(meas['area_b_um2'])}")
     print("═" * w)
-    print("  C→C = centre-to-centre   |   B→B = boundary-to-boundary\n")
+    print("  C→C = centre-to-centre   |   B→B = boundary-to-boundary   |   Area = cell polygon area\n")
 
 
 # ═════════════════════════════════════════════════════════════════════════════

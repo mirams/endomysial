@@ -14,8 +14,10 @@ analysis functions as czi_annotation_analysis.py and writes a spreadsheet
     3) annotation_number
     4) full_line_length
     5) boundary_boundary_length
+    6) cell_a_area
+    7) cell_b_area
 
-By default, lengths are written in micrometers.
+By default, lengths are written in micrometers and areas in µm².
 """
 
 from __future__ import annotations
@@ -56,7 +58,7 @@ def iter_czi_files(data_dir: Path):
 
 
 def analyse_czi(czi_path: Path, channel: int, scene: int):
-    """Return list of (annotation_index, full_len, boundary_len) tuples."""
+    """Return list of (annotation_index, full_len, boundary_len, area_a_um2, area_b_um2) tuples."""
     _, meta_xml, pixel_um, origin = load_czi(
         str(czi_path), channel=channel, scene=scene)
     blobs, lines = parse_annotations(
@@ -68,7 +70,8 @@ def analyse_czi(czi_path: Path, channel: int, scene: int):
         meas = measure(line, blob_a, blob_b, pixel_um)
         if meas is None:
             continue
-        rows.append((idx, meas["c2c_um"], meas["b2b_um"]))
+        rows.append((idx, meas["c2c_um"], meas["b2b_um"],
+                     meas["area_a_um2"], meas["area_b_um2"]))
     return rows
 
 
@@ -110,6 +113,8 @@ def main():
             "annotation_number",
             "full_line_length",
             "boundary_boundary_length",
+            "cell_a_area",
+            "cell_b_area",
         ])
 
         for top_name, slice_num, czi_path in iter_czi_files(data_dir):
@@ -123,13 +128,15 @@ def main():
                 continue
 
             analysed_files += 1
-            for annotation_num, full_len, boundary_len in measurements:
+            for annotation_num, full_len, boundary_len, area_a, area_b in measurements:
                 writer.writerow([
                     top_name,
                     slice_num,
                     annotation_num,
                     f"{full_len:.6f}",
                     f"{boundary_len:.6f}",
+                    f"{area_a:.6f}" if area_a is not None else "",
+                    f"{area_b:.6f}" if area_b is not None else "",
                 ])
                 written_rows += 1
 
