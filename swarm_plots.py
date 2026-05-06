@@ -20,7 +20,7 @@ CLASS_PALETTES = {
     "Paroxysmal AF": "Greens",
     "Persistent AF": "Reds",
 }
-METRIC = "boundary_boundary_length"
+METRIC = "boundary_length"
 
 
 def build_patient_palette(patient_metadata):
@@ -422,6 +422,105 @@ def plot_by_group(df, metric=METRIC, ylabel=None, save_path="swarm_plots_by_grou
     plt.show()
 
 
+def plot_mean_area_vs_boundary_panels(
+    df,
+    patient_order,
+    group_order,
+    patient_colour,
+    group_to_colour,
+    save_path="scatter_mean_area_vs_boundary_panels.png",
+):
+    scatter_df = df.copy()
+    scatter_df["mean_cell_area"] = scatter_df[["cell_a_area", "cell_b_area"]].mean(
+        axis=1
+    )
+    scatter_df = scatter_df.dropna(
+        subset=["boundary_length", "mean_cell_area"]
+    )
+
+    group_palette = {
+        af_type: sns.color_palette(CLASS_PALETTES[af_type], n_colors=6)[-1]
+        for af_type in CLASS_ORDER
+    }
+
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=(18, 5),
+        constrained_layout=True,
+        sharex=True,
+        sharey=True,
+    )
+
+    sns.scatterplot(
+        data=scatter_df,
+        x="boundary_length",
+        y="mean_cell_area",
+        hue="group",
+        hue_order=group_order,
+        palette=group_to_colour,
+        s=36,
+        alpha=0.85,
+        linewidth=0,
+        legend=False,
+        ax=axes[0],
+    )
+    axes[0].set_title("Coloured by Patient / Slice",
+                      fontsize=11, fontweight="bold")
+    axes[0].set_xlabel("Boundary Length")
+    axes[0].set_ylabel("Mean Cell Area (µm²)")
+
+    sns.scatterplot(
+        data=scatter_df,
+        x="boundary_length",
+        y="mean_cell_area",
+        hue="top_level_folder",
+        hue_order=patient_order,
+        palette=patient_colour,
+        s=36,
+        alpha=0.85,
+        linewidth=0,
+        legend=False,
+        ax=axes[1],
+    )
+    axes[1].set_title("Coloured by Patient", fontsize=11, fontweight="bold")
+    axes[1].set_xlabel("Boundary Length")
+    axes[1].set_ylabel("Mean Cell Area (µm²)")
+
+    sns.scatterplot(
+        data=scatter_df,
+        x="boundary_length",
+        y="mean_cell_area",
+        hue="af_type",
+        hue_order=CLASS_ORDER,
+        palette=group_palette,
+        s=38,
+        alpha=0.9,
+        linewidth=0,
+        ax=axes[2],
+    )
+    axes[2].set_title("Coloured by Group", fontsize=11, fontweight="bold")
+    axes[2].set_xlabel("Boundary Length")
+    axes[2].set_ylabel("Mean Cell Area (µm²)")
+    axes[2].legend(
+        title="Group",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0,
+        framealpha=0.9,
+        fontsize=8,
+    )
+
+    fig.suptitle(
+        "Mean Cell Area vs Boundary Length",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved -> {save_path}")
+    plt.show()
+
+
 def load_area_data(df):
     """Melt cell_a_area and cell_b_area into a single cell_area column."""
     id_cols = [c for c in df.columns if c not in (
@@ -448,6 +547,14 @@ def main():
         group_to_class,
         patient_to_class,
     ) = prepare_orders(df)
+
+    plot_mean_area_vs_boundary_panels(
+        df,
+        patient_order,
+        group_order,
+        patient_colour,
+        group_to_colour,
+    )
 
     plot_by_slice(
         df,

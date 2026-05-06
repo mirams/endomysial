@@ -1,4 +1,4 @@
-top_level_folder,slice_number,annotation_number,full_line_length,boundary_boundary_length,cell_a_area,cell_b_area
+top_level_folder,slice_number,annotation_number,full_line_length,boundary_length,cell_a_area,cell_b_area
 350,1,1,38.557062,13.346541,248.979701,376.626626
 350,1,2,17.442110,0.869339,244.054246,143.169965
 350,1,3,15.620936,1.202627,156.910872,122.619649

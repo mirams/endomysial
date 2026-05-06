@@ -112,7 +112,7 @@ def main():
             "slice_number",
             "annotation_number",
             "full_line_length",
-            "boundary_boundary_length",
+            "boundary_length",
             "cell_a_area",
             "cell_b_area",
         ])
