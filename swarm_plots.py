@@ -218,6 +218,7 @@ def plot_by_slice(
     group_to_class,
     metric=METRIC,
     ylabel=None,
+    size=5,
     save_path="swarm_plots.png",
 ):
     ylabel = ylabel or metric.replace("_", " ").title()
@@ -236,7 +237,7 @@ def plot_by_slice(
         order=group_order,
         hue_order=group_order,
         palette=group_to_colour,
-        size=5,
+        size=size,
         legend=False,
         ax=ax,
     )
@@ -294,6 +295,7 @@ def plot_by_patient(
     patient_to_class,
     metric=METRIC,
     ylabel=None,
+    size=5,
     save_path="swarm_plots_by_patient.png",
 ):
     ylabel = ylabel or metric.replace("_", " ").title()
@@ -312,7 +314,7 @@ def plot_by_patient(
         order=patient_order,
         hue_order=patient_order,
         palette=patient_colour,
-        size=5,
+        size=size,
         legend=False,
         ax=ax,
     )
@@ -353,7 +355,7 @@ def plot_by_patient(
     plt.show()
 
 
-def plot_by_group(df, metric=METRIC, ylabel=None, save_path="swarm_plots_by_group.png"):
+def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots_by_group.png"):
     ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
         figsize=(8, 5),
@@ -365,18 +367,6 @@ def plot_by_group(df, metric=METRIC, ylabel=None, save_path="swarm_plots_by_grou
         for af_type in CLASS_ORDER
     }
 
-    sns.swarmplot(
-        data=df,
-        x="af_type",
-        y=metric,
-        hue="af_type",
-        order=CLASS_ORDER,
-        hue_order=CLASS_ORDER,
-        palette=group_palette,
-        size=5,
-        legend=False,
-        ax=ax,
-    )
     sns.boxplot(
         data=df,
         x="af_type",
@@ -388,8 +378,23 @@ def plot_by_group(df, metric=METRIC, ylabel=None, save_path="swarm_plots_by_grou
         fliersize=0,
         linewidth=0.9,
         boxprops=dict(alpha=0.28),
+        whiskerprops=dict(alpha=0.4),
+        capprops=dict(alpha=0.4),
         medianprops=dict(color="black", linewidth=1.6),
         palette=group_palette,
+        legend=False,
+        ax=ax,
+    )
+    sns.swarmplot(
+        data=df,
+        x="af_type",
+        y=metric,
+        hue="af_type",
+        order=CLASS_ORDER,
+        hue_order=CLASS_ORDER,
+        palette=group_palette,
+        size=size,
+        alpha=0.5,
         legend=False,
         ax=ax,
     )
@@ -586,6 +591,7 @@ def main():
         group_to_class,
         metric="cell_area",
         ylabel="Cell Area (µm²)",
+        size=3,
         save_path="swarm_plots_cell_area.png",
     )
     plot_by_patient(
@@ -595,12 +601,14 @@ def main():
         patient_to_class,
         metric="cell_area",
         ylabel="Cell Area (µm²)",
+        size=3,
         save_path="swarm_plots_cell_area_by_patient.png",
     )
     plot_by_group(
         area_df,
         metric="cell_area",
         ylabel="Cell Area (µm²)",
+        size=4,
         save_path="swarm_plots_cell_area_by_group.png",
     )
 
