@@ -27,3 +27,9 @@ To run the analysis on all files and output tabulated results in a csv file, run
 ```bash
 python czi_batch_analysis.py
 ```
+
+The script
+```bash
+python swarm_plots.py
+```
+then reads that csv file to create the swarm plots which provide a visual overview of the results.
