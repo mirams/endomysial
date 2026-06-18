@@ -219,7 +219,7 @@ def plot_by_slice(
     metric=METRIC,
     ylabel=None,
     size=5,
-    save_path="swarm_plots.png",
+    save_path="swarm_plots_boundary.png",
 ):
     ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
@@ -296,7 +296,7 @@ def plot_by_patient(
     metric=METRIC,
     ylabel=None,
     size=5,
-    save_path="swarm_plots_by_patient.png",
+    save_path="swarm_plots_boundary_by_patient.png",
 ):
     ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
@@ -355,7 +355,7 @@ def plot_by_patient(
     plt.show()
 
 
-def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots_by_group.png"):
+def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots_boundary_by_group.png"):
     ylabel = ylabel or metric.replace("_", " ").title()
     fig, ax = plt.subplots(
         figsize=(8, 5),
