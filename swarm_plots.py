@@ -21,6 +21,14 @@ CLASS_PALETTES = {
     "Persistent AF": "Reds",
 }
 METRIC = "boundary_length"
+METRIC_LABELS = {"boundary_length": "Boundary to boundary distance",
+                 "cell_area": "Cell area"}
+METRIC_UNITS = {"boundary_length": "µm", "cell_area": "µm²"}
+
+
+def _axis_label(ylabel, metric):
+    unit = METRIC_UNITS.get(metric)
+    return f"{ylabel} ({unit})" if unit else ylabel
 
 
 def build_patient_palette(patient_metadata):
@@ -80,20 +88,23 @@ def add_class_backgrounds(ax, ordered_labels, label_to_class):
         start_index = end_index + 1
 
 
-def add_legends(ax, patient_order, patient_colour):
-    patient_handles = [
+def build_patient_handles(patient_order, patient_colour):
+    return [
         plt.Line2D(
             [0],
             [0],
             marker="o",
             color="w",
             markerfacecolor=patient_colour[patient_id],
-            markersize=8,
+            markersize=14,
             label=f"Patient {patient_id}",
         )
         for patient_id in patient_order
     ]
-    class_handles = [
+
+
+def build_class_handles():
+    return [
         mpatches.Patch(
             facecolor=CLASS_BG_COLOUR[af_type],
             alpha=0.25,
@@ -102,6 +113,11 @@ def add_legends(ax, patient_order, patient_colour):
         for af_type in CLASS_ORDER
     ]
 
+
+def add_legends(ax, patient_order, patient_colour):
+    patient_handles = build_patient_handles(patient_order, patient_colour)
+    class_handles = build_class_handles()
+
     patient_legend = ax.legend(
         handles=patient_handles,
         title="Patient",
@@ -109,7 +125,7 @@ def add_legends(ax, patient_order, patient_colour):
         bbox_to_anchor=(1.01, 1.0),
         borderaxespad=0,
         framealpha=0.9,
-        fontsize=8,
+        fontsize=16,
     )
     ax.add_artist(patient_legend)
 
@@ -120,7 +136,28 @@ def add_legends(ax, patient_order, patient_colour):
         bbox_to_anchor=(1.01, 0.18),
         borderaxespad=0,
         framealpha=0.9,
-        fontsize=8,
+        fontsize=16,
+    )
+
+
+def add_central_legend(legend_ax, patient_order, patient_colour):
+    legend_ax.axis("off")
+    spacer = mpatches.Patch(facecolor="none", edgecolor="none", label="")
+    handles = (
+        build_patient_handles(patient_order, patient_colour)
+        + [spacer]
+        + build_class_handles()
+    )
+    legend_ax.legend(
+        handles=handles,
+        loc="center",
+        ncol=-(-len(handles) // 2),
+        mode="expand",
+        bbox_to_anchor=(0, 0, 1, 1),
+        frameon=False,
+        fontsize=18,
+        columnspacing=1.0,
+        handletextpad=0.4,
     )
 
 
@@ -218,14 +255,21 @@ def plot_by_slice(
     group_to_class,
     metric=METRIC,
     ylabel=None,
-    size=5,
+    size=7.5,
     save_path="swarm_plots_boundary.png",
+    ax=None,
+    show_legend=True,
 ):
-    ylabel = ylabel or metric.replace("_", " ").title()
-    fig, ax = plt.subplots(
-        figsize=(max(14, len(group_order) * 0.6), 5),
-        constrained_layout=True,
-    )
+    ylabel = ylabel or METRIC_LABELS.get(
+        metric, metric.replace("_", " ").title())
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(
+            figsize=(max(14, len(group_order) * 0.6), 5),
+            constrained_layout=True,
+        )
+    else:
+        fig = ax.figure
 
     add_class_backgrounds(ax, group_order, group_to_class)
 
@@ -249,7 +293,7 @@ def plot_by_slice(
         order=group_order,
         hue_order=group_order,
         width=0.4,
-        fliersize=0,
+        showfliers=False,
         linewidth=0.8,
         boxprops=dict(alpha=0.25),
         medianprops=dict(color="black", linewidth=1.5),
@@ -272,20 +316,24 @@ def plot_by_slice(
             )
         prev_patient = patient_id
 
-    ax.set_title(ylabel, fontsize=13, fontweight="bold")
-    ax.set_xlabel("Patient / Slice", fontsize=10)
-    ax.set_ylabel(ylabel, fontsize=10)
-    ax.tick_params(axis="x", rotation=55, labelsize=8)
-    add_legends(ax, patient_order, patient_colour)
+    # ax.set_title(ylabel, fontsize=13, fontweight="bold")
+    ax.set_xlabel("Patient / Slice", fontsize=20)
+    ax.set_ylabel(_axis_label(ylabel, metric), fontsize=20)
+    ax.tick_params(axis="x", rotation=55, labelsize=16)
+    ax.tick_params(axis="y", labelsize=16)
+    if show_legend:
+        add_legends(ax, patient_order, patient_colour)
 
-    fig.suptitle(
-        "CZI Annotation Measurements - Swarm Plots by Patient & Slice",
-        fontsize=14,
-        fontweight="bold",
-    )
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"Saved -> {save_path}")
-    plt.show()
+    if standalone:
+        fig.suptitle(
+            "CZI Annotation Measurements - Swarm Plots by Patient & Slice",
+            fontsize=28,
+            fontweight="bold",
+        )
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved -> {save_path}")
+        plt.show()
+    return ax
 
 
 def plot_by_patient(
@@ -295,14 +343,21 @@ def plot_by_patient(
     patient_to_class,
     metric=METRIC,
     ylabel=None,
-    size=5,
+    size=7.5,
     save_path="swarm_plots_boundary_by_patient.png",
+    ax=None,
+    show_legend=True,
 ):
-    ylabel = ylabel or metric.replace("_", " ").title()
-    fig, ax = plt.subplots(
-        figsize=(max(8, len(patient_order) * 0.8), 5),
-        constrained_layout=True,
-    )
+    ylabel = ylabel or METRIC_LABELS.get(
+        metric, metric.replace("_", " ").title())
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(
+            figsize=(max(8, len(patient_order) * 0.8), 5),
+            constrained_layout=True,
+        )
+    else:
+        fig = ax.figure
 
     add_class_backgrounds(ax, patient_order, patient_to_class)
 
@@ -326,7 +381,7 @@ def plot_by_patient(
         order=patient_order,
         hue_order=patient_order,
         width=0.4,
-        fliersize=0,
+        showfliers=False,
         linewidth=0.8,
         boxprops=dict(alpha=0.25),
         medianprops=dict(color="black", linewidth=1.5),
@@ -336,31 +391,47 @@ def plot_by_patient(
     )
 
     ax.set_title(
-        f"{ylabel} by Patient",
-        fontsize=13,
+        f"by Patient",
+        fontsize=26,
         fontweight="bold",
     )
-    ax.set_xlabel("Patient", fontsize=10)
-    ax.set_ylabel(ylabel, fontsize=10)
-    ax.tick_params(axis="x", labelsize=9)
-    add_legends(ax, patient_order, patient_colour)
+    ax.set_xlabel("Patient", fontsize=20)
+    ax.set_ylabel(_axis_label(ylabel, metric), fontsize=20)
+    ax.tick_params(axis="x", labelsize=18)
+    ax.tick_params(axis="y", labelsize=16)
+    if show_legend:
+        add_legends(ax, patient_order, patient_colour)
 
-    fig.suptitle(
-        "CZI Annotation Measurements - Swarm Plots by Patient",
-        fontsize=14,
-        fontweight="bold",
-    )
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"Saved -> {save_path}")
-    plt.show()
+    if standalone:
+        fig.suptitle(
+            "CZI Annotation Measurements - Swarm Plots by Patient",
+            fontsize=28,
+            fontweight="bold",
+        )
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved -> {save_path}")
+        plt.show()
+    return ax
 
 
-def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots_boundary_by_group.png"):
-    ylabel = ylabel or metric.replace("_", " ").title()
-    fig, ax = plt.subplots(
-        figsize=(8, 5),
-        constrained_layout=True,
-    )
+def plot_by_group(
+    df,
+    metric=METRIC,
+    ylabel=None,
+    size=7.5,
+    save_path="swarm_plots_boundary_by_group.png",
+    ax=None,
+):
+    ylabel = ylabel or METRIC_LABELS.get(
+        metric, metric.replace("_", " ").title())
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(
+            figsize=(8, 5),
+            constrained_layout=True,
+        )
+    else:
+        fig = ax.figure
 
     group_palette = {
         af_type: sns.color_palette(CLASS_PALETTES[af_type], n_colors=6)[-1]
@@ -375,7 +446,7 @@ def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots
         order=CLASS_ORDER,
         hue_order=CLASS_ORDER,
         width=0.42,
-        fliersize=0,
+        showfliers=False,
         linewidth=0.9,
         boxprops=dict(alpha=0.28),
         whiskerprops=dict(alpha=0.4),
@@ -400,30 +471,94 @@ def plot_by_group(df, metric=METRIC, ylabel=None, size=5, save_path="swarm_plots
     )
 
     ax.set_title(
-        f"{ylabel} by Group",
-        fontsize=13,
+        f"by Group",
+        fontsize=26,
         fontweight="bold",
     )
-    ax.set_xlabel("Group", fontsize=10)
-    ax.set_ylabel(ylabel, fontsize=10)
-    ax.tick_params(axis="x", labelsize=10)
+    ax.set_xlabel("Group", fontsize=20)
+    ax.set_ylabel(_axis_label(ylabel, metric), fontsize=20)
+    ax.tick_params(axis="x", labelsize=20)
+    ax.tick_params(axis="y", labelsize=16)
 
-    handles = [
-        mpatches.Patch(
-            facecolor=group_palette[af_type],
-            alpha=0.35,
-            label=af_type,
+    if standalone:
+        fig.suptitle(
+            "CZI Annotation Measurements - Swarm Plot by Group",
+            fontsize=28,
+            fontweight="bold",
         )
-        for af_type in CLASS_ORDER
-    ]
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved -> {save_path}")
+        plt.show()
+    return ax
+
+
+def plot_combined_swarm_panels(
+    df,
+    patient_order,
+    group_order,
+    patient_colour,
+    group_to_colour,
+    group_to_class,
+    patient_to_class,
+    metric=METRIC,
+    ylabel=None,
+    size=7.5,
+    save_path="swarm_plots_combined.png",
+):
+    ylabel = ylabel or METRIC_LABELS.get(
+        metric, metric.replace("_", " ").title())
+
+    fig = plt.figure(figsize=(26, 14), constrained_layout=True)
+    gs = fig.add_gridspec(3, 2, height_ratios=[1, 0.35, 1])
+    ax_slice = fig.add_subplot(gs[0, :])
+    legend_ax = fig.add_subplot(gs[1, :])
+    ax_patient = fig.add_subplot(gs[2, 0])
+    ax_group = fig.add_subplot(gs[2, 1])
+
+    plot_by_slice(
+        df,
+        patient_order,
+        group_order,
+        patient_colour,
+        group_to_colour,
+        group_to_class,
+        metric=metric,
+        ylabel=ylabel,
+        size=size,
+        ax=ax_slice,
+        show_legend=False,
+    )
+    plot_by_patient(
+        df,
+        patient_order,
+        patient_colour,
+        patient_to_class,
+        metric=metric,
+        ylabel=ylabel,
+        size=size,
+        ax=ax_patient,
+        show_legend=False,
+    )
+    plot_by_group(
+        df,
+        metric=metric,
+        ylabel=ylabel,
+        size=size,
+        ax=ax_group,
+    )
+
+    add_central_legend(legend_ax, patient_order, patient_colour)
 
     fig.suptitle(
-        "CZI Annotation Measurements - Swarm Plot by Group",
-        fontsize=14,
+        f"{ylabel} swarm plots",
+        fontsize=32,
         fontweight="bold",
     )
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     print(f"Saved -> {save_path}")
+    pdf_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    plt.savefig(pdf_path, bbox_inches="tight")
+    print(f"Saved -> {pdf_path}")
     plt.show()
 
 
@@ -472,7 +607,7 @@ def plot_mean_area_vs_boundary_panels(
     )
     axes[0].set_title("Coloured by Patient / Slice",
                       fontsize=11, fontweight="bold")
-    axes[0].set_xlabel("Boundary Length")
+    axes[0].set_xlabel("Inter-boundary Distance (µm)")
     axes[0].set_ylabel("Mean Cell Area (µm²)")
 
     sns.scatterplot(
@@ -489,7 +624,7 @@ def plot_mean_area_vs_boundary_panels(
         ax=axes[1],
     )
     axes[1].set_title("Coloured by Patient", fontsize=11, fontweight="bold")
-    axes[1].set_xlabel("Boundary Length")
+    axes[1].set_xlabel("Inter-boundary Distance (µm)")
     axes[1].set_ylabel("Mean Cell Area (µm²)")
 
     sns.scatterplot(
@@ -505,7 +640,7 @@ def plot_mean_area_vs_boundary_panels(
         ax=axes[2],
     )
     axes[2].set_title("Coloured by Group", fontsize=11, fontweight="bold")
-    axes[2].set_xlabel("Boundary Length")
+    axes[2].set_xlabel("Inter-boundary Distance (µm)")
     axes[2].set_ylabel("Mean Cell Area (µm²)")
     axes[2].legend(
         title="Group",
@@ -513,11 +648,11 @@ def plot_mean_area_vs_boundary_panels(
         bbox_to_anchor=(1.02, 1.0),
         borderaxespad=0,
         framealpha=0.9,
-        fontsize=8,
+        fontsize=16,
     )
 
     fig.suptitle(
-        "Mean Cell Area vs Boundary Length",
+        "Mean Cell Area vs Inter-boundary Distance",
         fontsize=14,
         fontweight="bold",
     )
@@ -561,16 +696,16 @@ def main():
         group_to_colour,
     )
 
-    plot_by_slice(
+    plot_combined_swarm_panels(
         df,
         patient_order,
         group_order,
         patient_colour,
         group_to_colour,
         group_to_class,
+        patient_to_class,
+        save_path="swarm_plots_boundary_combined.png",
     )
-    plot_by_patient(df, patient_order, patient_colour, patient_to_class)
-    plot_by_group(df)
 
     area_df = load_area_data(df)
     (
@@ -582,34 +717,17 @@ def main():
         patient_to_class,
     ) = prepare_orders(area_df)
 
-    plot_by_slice(
+    plot_combined_swarm_panels(
         area_df,
         patient_order,
         group_order,
         patient_colour,
         group_to_colour,
         group_to_class,
-        metric="cell_area",
-        ylabel="Cell Area (µm²)",
-        size=3,
-        save_path="swarm_plots_cell_area.png",
-    )
-    plot_by_patient(
-        area_df,
-        patient_order,
-        patient_colour,
         patient_to_class,
         metric="cell_area",
-        ylabel="Cell Area (µm²)",
-        size=3,
-        save_path="swarm_plots_cell_area_by_patient.png",
-    )
-    plot_by_group(
-        area_df,
-        metric="cell_area",
-        ylabel="Cell Area (µm²)",
-        size=4,
-        save_path="swarm_plots_cell_area_by_group.png",
+        size=4.5,
+        save_path="swarm_plots_cell_area_combined.png",
     )
 
 
