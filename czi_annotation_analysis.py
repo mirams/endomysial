@@ -50,19 +50,30 @@ BDY_COLOUR = "#ff2255"   # red   – boundary-to-boundary segment
 # 1.  LOAD CZI
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _image_origin_px(czi):
+def _image_origin_px(czi, scene=0):
     """
-    Extract (X, Y) pixel-space origin from czifile if possible, or None.
-    The czifile API varies across versions, so this is best-effort.
-    XML parsing in _coord_offset is the primary fallback.
+    Extract the (X, Y) pixel-space origin of `scene` from the raw subblock
+    directory, or None if it can't be determined.
+
+    Each subblock records its own start position in the file's global
+    pixel-coordinate space (the same space Zen's annotation XML uses), and
+    is tagged with which scene it belongs to. The minimum start over all
+    subblocks belonging to `scene` is that scene's top-left corner.
+
+    A file's top-level metadata (e.g. <SubsetBounds> in the XML) only ever
+    describes a single scene — not necessarily the one being analysed here
+    — so it cannot be used to align annotations for the other scenes in a
+    multi-scene file.
     """
-    # Try to read top-level start position directly
     try:
-        if hasattr(czi, 'start') and czi.start is not None:
-            # czi.start might be (start_x, start_y, ...) depending on dims
-            # For now, assume first two are X, Y if they exist
-            if len(czi.start) >= 2:
-                return float(czi.start[0]), float(czi.start[1])
+        entries = [
+            e for e in czi.filtered_subblock_directory
+            if e.scene_index == scene
+        ]
+        xs = [e.start[e.dims.index('X')] for e in entries if 'X' in e.dims]
+        ys = [e.start[e.dims.index('Y')] for e in entries if 'Y' in e.dims]
+        if xs and ys:
+            return float(min(xs)), float(min(ys))
     except Exception:
         pass
 
@@ -90,7 +101,7 @@ def load_czi(path, channel=0, scene=0):
         pixel_um = _pixel_size_from_xml(meta_xml)
 
         # ── Image origin from subblock bounding box (reliable) ───────────
-        origin = _image_origin_px(czi)
+        origin = _image_origin_px(czi, scene=scene)
 
         # ── Image data ───────────────────────────────────────────────────
         # Prefer asxarray: gives named dims so we can select channel safely.
