@@ -54,6 +54,13 @@ def build_patient_palette(patient_metadata):
     return patient_colour
 
 
+def build_group_palette():
+    return {
+        af_type: sns.color_palette(CLASS_PALETTES[af_type], n_colors=6)[-1]
+        for af_type in CLASS_ORDER
+    }
+
+
 def add_class_backgrounds(ax, ordered_labels, label_to_class):
     start_index = 0
 
@@ -448,10 +455,7 @@ def plot_by_group(
     else:
         fig = ax.figure
 
-    group_palette = {
-        af_type: sns.color_palette(CLASS_PALETTES[af_type], n_colors=6)[-1]
-        for af_type in CLASS_ORDER
-    }
+    group_palette = build_group_palette()
 
     sns.boxplot(
         data=df,
@@ -595,10 +599,7 @@ def plot_mean_area_vs_boundary_panels(
         subset=["boundary_length", "mean_cell_area"]
     )
 
-    group_palette = {
-        af_type: sns.color_palette(CLASS_PALETTES[af_type], n_colors=6)[-1]
-        for af_type in CLASS_ORDER
-    }
+    group_palette = build_group_palette()
 
     fig, axes = plt.subplots(
         1,
