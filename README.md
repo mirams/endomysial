@@ -34,4 +34,9 @@ The script
 ```bash
 python swarm_plots.py
 ```
-then reads that csv file to create the swarm plots which provide a visual overview of the results.
+then reads that csv file to create the swarm plots (Figs 4 and 5 in the paper) which provide a visual overview of the results.
+
+```bash
+python plot_group_means.py
+```
+plots the group means with their 95% confidence intervals (Fig 6 in the paper).
