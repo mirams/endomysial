@@ -88,7 +88,11 @@ def add_class_backgrounds(ax, ordered_labels, label_to_class):
         start_index = end_index + 1
 
 
-def build_patient_handles(patient_order, patient_colour):
+def patient_labels(df):
+    return dict(zip(df["top_level_folder"], df["patient_label"]))
+
+
+def build_patient_handles(patient_order, patient_colour, patient_to_label):
     return [
         plt.Line2D(
             [0],
@@ -97,7 +101,7 @@ def build_patient_handles(patient_order, patient_colour):
             color="w",
             markerfacecolor=patient_colour[patient_id],
             markersize=14,
-            label=f"Patient {patient_id}",
+            label=f"Patient {patient_to_label[patient_id]}",
         )
         for patient_id in patient_order
     ]
@@ -114,8 +118,10 @@ def build_class_handles():
     ]
 
 
-def add_legends(ax, patient_order, patient_colour):
-    patient_handles = build_patient_handles(patient_order, patient_colour)
+def add_legends(ax, patient_order, patient_colour, patient_to_label):
+    patient_handles = build_patient_handles(
+        patient_order, patient_colour, patient_to_label
+    )
     class_handles = build_class_handles()
 
     patient_legend = ax.legend(
@@ -140,11 +146,13 @@ def add_legends(ax, patient_order, patient_colour):
     )
 
 
-def add_central_legend(legend_ax, patient_order, patient_colour):
+def add_central_legend(
+    legend_ax, patient_order, patient_colour, patient_to_label
+):
     legend_ax.axis("off")
     spacer = mpatches.Patch(facecolor="none", edgecolor="none", label="")
     handles = (
-        build_patient_handles(patient_order, patient_colour)
+        build_patient_handles(patient_order, patient_colour, patient_to_label)
         + [spacer]
         + build_class_handles()
     )
@@ -166,6 +174,7 @@ def load_data():
     class_df = pd.read_csv("Data/patient_classes.txt").rename(
         columns={
             "Patient number": "top_level_folder",
+            "Label_number": "patient_label",
             "Group": "af_type_raw",
         }
     )
@@ -181,7 +190,7 @@ def load_data():
         )
 
     df = df.merge(
-        class_df[["top_level_folder", "af_type"]],
+        class_df[["top_level_folder", "patient_label", "af_type"]],
         on="top_level_folder",
         how="left",
     )
@@ -198,7 +207,7 @@ def load_data():
         {group: index for index, group in enumerate(CLASS_ORDER)}
     )
     df["group"] = (
-        df["top_level_folder"].astype(str)
+        df["patient_label"].astype(str)
         + " / S"
         + df["slice_number"].astype(str)
     )
@@ -322,7 +331,7 @@ def plot_by_slice(
     ax.tick_params(axis="x", rotation=55, labelsize=16)
     ax.tick_params(axis="y", labelsize=16)
     if show_legend:
-        add_legends(ax, patient_order, patient_colour)
+        add_legends(ax, patient_order, patient_colour, patient_labels(df))
 
     if standalone:
         fig.suptitle(
@@ -390,6 +399,12 @@ def plot_by_patient(
         ax=ax,
     )
 
+    patient_to_label = patient_labels(df)
+    ax.set_xticks(
+        range(len(patient_order)),
+        [patient_to_label[patient_id] for patient_id in patient_order],
+    )
+
     ax.set_title(
         f"by Patient",
         fontsize=26,
@@ -400,7 +415,7 @@ def plot_by_patient(
     ax.tick_params(axis="x", labelsize=18)
     ax.tick_params(axis="y", labelsize=16)
     if show_legend:
-        add_legends(ax, patient_order, patient_colour)
+        add_legends(ax, patient_order, patient_colour, patient_to_label)
 
     if standalone:
         fig.suptitle(
@@ -547,7 +562,9 @@ def plot_combined_swarm_panels(
         ax=ax_group,
     )
 
-    add_central_legend(legend_ax, patient_order, patient_colour)
+    add_central_legend(
+        legend_ax, patient_order, patient_colour, patient_labels(df)
+    )
 
     fig.suptitle(
         f"{ylabel} swarm plots",

@@ -16,6 +16,8 @@ First navigate to this folder at the terminal, then run
 source .venv/bin/activate
 ```
 
+Image data (.czi files) should be placed in the `Data` folder. The analysis scripts will automatically look for files in that folder.
+
 To look at the annotated images with highlighted line segments, run for each file:
 
 ```bash
