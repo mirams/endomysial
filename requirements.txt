@@ -1,0 +1,5 @@
+czifile
+matplotlib
+pandas
+seaborn
+scipy
